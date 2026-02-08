@@ -1,0 +1,41 @@
+# Build directories
+build/
+cmake-build-*/
+
+# CMake generated files
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+*.cmake
+
+# Compiled files
+*.o
+*.obj
+*.elf
+*.bin
+*.hex
+*.uf2
+*.map
+*.dis
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Claude AI configuration
+CLAUDE.md
+.claude/
+
+# Pico SDK local copy (if present)
+pico-sdk/
+
+# Temporary files
+*.tmp
+*.temp
+*.log

@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>N64-USB Gamepad Tester</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html, body {
+            height: 100%;
+            overflow: hidden;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+            display: flex;
+            flex-direction: column;
+            padding: 12px 20px;
+        }
+
+        /* Header */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            flex-shrink: 0;
+        }
+
+        h1 {
+            color: #4fc3f7;
+            font-size: 1.4em;
+        }
+
+        .status {
+            padding: 8px 20px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .status.disconnected {
+            background: #c62828;
+        }
+
+        .status.connected {
+            background: #2e7d32;
+        }
+
+        /* Main Layout - 3 columns */
+        .main-container {
+            display: grid;
+            grid-template-columns: 1fr 1.2fr 1fr;
+            gap: 20px;
+            flex: 1;
+            min-height: 0;
+        }
+
+        .column {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            min-height: 0;
+        }
+
+        .section {
+            background: #16213e;
+            border-radius: 10px;
+            padding: 14px;
+        }
+
+        .section h2 {
+            margin-bottom: 10px;
+            color: #4fc3f7;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        /* Buttons Grid - 2 rows */
+        .buttons-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 8px;
+        }
+
+        .button {
+            aspect-ratio: 1.3;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 13px;
+            background: #0f3460;
+            border: 2px solid #1a1a2e;
+            transition: all 0.1s ease;
+        }
+
+        .button.pressed {
+            background: #4fc3f7;
+            color: #1a1a2e;
+            transform: scale(0.95);
+            box-shadow: 0 0 15px rgba(79, 195, 247, 0.5);
+        }
+
+        /* D-Pad */
+        .dpad-section {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .dpad {
+            display: grid;
+            grid-template-columns: repeat(3, 45px);
+            grid-template-rows: repeat(3, 45px);
+            gap: 3px;
+        }
+
+        .dpad-btn {
+            background: #0f3460;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            transition: all 0.1s ease;
+        }
+
+        .dpad-btn.empty {
+            background: transparent;
+        }
+
+        .dpad-btn.pressed {
+            background: #4fc3f7;
+            color: #1a1a2e;
+            box-shadow: 0 0 15px rgba(79, 195, 247, 0.5);
+        }
+
+        /* Center Column - Joystick */
+        .stick-section {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .stick-wrapper {
+            text-align: center;
+        }
+
+        .stick {
+            width: min(200px, 25vh);
+            height: min(200px, 25vh);
+            background: #0f3460;
+            border-radius: 50%;
+            position: relative;
+            margin: 0 auto 15px;
+            border: 3px solid #16213e;
+        }
+
+        .stick-pos {
+            width: 20%;
+            height: 20%;
+            background: linear-gradient(135deg, #4fc3f7, #29b6f6);
+            border-radius: 50%;
+            position: absolute;
+            transform: translate(-50%, -50%);
+            transition: all 0.05s ease;
+            box-shadow: 0 0 15px rgba(79, 195, 247, 0.6);
+        }
+
+        .stick-crosshair {
+            position: absolute;
+            background: #1a1a2e;
+            opacity: 0.5;
+        }
+
+        .stick-crosshair.h {
+            width: 100%;
+            height: 1px;
+            top: 50%;
+        }
+
+        .stick-crosshair.v {
+            width: 1px;
+            height: 100%;
+            left: 50%;
+        }
+
+        .axis-display {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            font-family: monospace;
+            font-size: 16px;
+        }
+
+        .axis-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .axis-label {
+            color: #888;
+            font-size: 12px;
+            margin-bottom: 4px;
+        }
+
+        .axis-value {
+            color: #4fc3f7;
+            font-size: 24px;
+            font-weight: bold;
+        }
+
+        /* N64 Controller Visual */
+        .controller-visual {
+            margin-top: 20px;
+            display: flex;
+            justify-content: center;
+            gap: 40px;
+            font-size: 11px;
+            color: #666;
+        }
+
+        .trigger {
+            padding: 8px 25px;
+            background: #0f3460;
+            border-radius: 4px;
+            text-align: center;
+            transition: all 0.1s ease;
+        }
+
+        .trigger.pressed {
+            background: #4fc3f7;
+            color: #1a1a2e;
+            box-shadow: 0 0 10px rgba(79, 195, 247, 0.5);
+        }
+
+        /* Right Column - Raw Data */
+        .raw-section {
+            flex: 1;
+            overflow: auto;
+        }
+
+        .raw-data {
+            font-family: monospace;
+            font-size: 12px;
+            line-height: 1.6;
+        }
+
+        .raw-data > div {
+            display: flex;
+            padding: 4px 0;
+            border-bottom: 1px solid #0f3460;
+        }
+
+        .raw-data .label {
+            color: #888;
+            width: 80px;
+            flex-shrink: 0;
+        }
+
+        .raw-data .value {
+            color: #4fc3f7;
+            word-break: break-all;
+        }
+
+        /* Instructions */
+        .instructions {
+            font-size: 11px;
+            line-height: 1.5;
+            color: #888;
+        }
+
+        .instructions ol {
+            margin-left: 16px;
+        }
+
+        .instructions li {
+            margin-bottom: 3px;
+        }
+
+        /* Footer */
+        footer {
+            text-align: center;
+            padding-top: 8px;
+            color: #444;
+            font-size: 11px;
+            flex-shrink: 0;
+        }
+
+        footer a {
+            color: #4fc3f7;
+            text-decoration: none;
+        }
+
+        /* C-Buttons visual representation */
+        .c-buttons {
+            display: grid;
+            grid-template-columns: repeat(3, 35px);
+            grid-template-rows: repeat(3, 35px);
+            gap: 3px;
+            margin-top: 10px;
+        }
+
+        .c-btn {
+            background: #3d5a1f;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            font-weight: bold;
+            color: #7cb342;
+            transition: all 0.1s ease;
+        }
+
+        .c-btn.empty {
+            background: transparent;
+        }
+
+        .c-btn.pressed {
+            background: #8bc34a;
+            color: #1a1a2e;
+            box-shadow: 0 0 10px rgba(139, 195, 74, 0.5);
+        }
+
+        /* Face buttons (A, B, Start, Z) */
+        .face-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            align-items: flex-end;
+            margin-top: 10px;
+        }
+
+        .face-btn {
+            width: 45px;
+            height: 45px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 14px;
+            transition: all 0.1s ease;
+        }
+
+        .face-btn.a-btn {
+            background: #1565c0;
+            width: 55px;
+            height: 55px;
+        }
+
+        .face-btn.b-btn {
+            background: #2e7d32;
+        }
+
+        .face-btn.start-btn {
+            background: #c62828;
+            width: 35px;
+            height: 35px;
+            font-size: 10px;
+        }
+
+        .face-btn.z-btn {
+            background: #6a1b9a;
+            border-radius: 8px;
+            width: 60px;
+            height: 35px;
+        }
+
+        .face-btn.pressed {
+            transform: scale(0.9);
+            filter: brightness(1.3);
+            box-shadow: 0 0 15px currentColor;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>N64-USB Gamepad Tester</h1>
+        <div id="status" class="status disconnected">
+            Aucune manette - Appuyez sur un bouton
+        </div>
+    </header>
+
+    <div class="main-container">
+        <!-- Left Column: Buttons -->
+        <div class="column">
+            <div class="section">
+                <h2>Boutons</h2>
+                <div class="buttons-grid">
+                    <div class="button" id="btn-0">A</div>
+                    <div class="button" id="btn-1">B</div>
+                    <div class="button" id="btn-2">Z</div>
+                    <div class="button" id="btn-3">C-Up</div>
+                    <div class="button" id="btn-4">L</div>
+                    <div class="button" id="btn-5">R</div>
+                    <div class="button" id="btn-6">C-Dn</div>
+                    <div class="button" id="btn-7">C-Lt</div>
+                    <div class="button" id="btn-8">C-Rt</div>
+                    <div class="button" id="btn-9">Start</div>
+                </div>
+            </div>
+
+            <div class="section dpad-section">
+                <div>
+                    <h2 style="text-align: center;">D-Pad</h2>
+                    <div class="dpad">
+                        <div class="dpad-btn empty"></div>
+                        <div class="dpad-btn" id="dpad-up">&#9650;</div>
+                        <div class="dpad-btn empty"></div>
+                        <div class="dpad-btn" id="dpad-left">&#9664;</div>
+                        <div class="dpad-btn empty"></div>
+                        <div class="dpad-btn" id="dpad-right">&#9654;</div>
+                        <div class="dpad-btn empty"></div>
+                        <div class="dpad-btn" id="dpad-down">&#9660;</div>
+                        <div class="dpad-btn empty"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Center Column: Joystick + Visual -->
+        <div class="column">
+            <div class="section stick-section">
+                <h2 style="text-align: center; margin-bottom: 15px;">Joystick Analogique</h2>
+                <div class="stick-wrapper">
+                    <div class="stick" id="stick-left">
+                        <div class="stick-crosshair h"></div>
+                        <div class="stick-crosshair v"></div>
+                        <div class="stick-pos" id="stick-left-pos"></div>
+                    </div>
+                    <div class="axis-display">
+                        <div class="axis-item">
+                            <span class="axis-label">X</span>
+                            <span class="axis-value" id="axis-lx">128</span>
+                        </div>
+                        <div class="axis-item">
+                            <span class="axis-label">Y</span>
+                            <span class="axis-value" id="axis-ly">128</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="controller-visual">
+                    <div class="trigger" id="trigger-l">L</div>
+                    <div class="trigger" id="trigger-z">Z</div>
+                    <div class="trigger" id="trigger-r">R</div>
+                </div>
+
+                <div style="display: flex; justify-content: center; gap: 50px; margin-top: 15px;">
+                    <!-- C-Buttons -->
+                    <div style="text-align: center;">
+                        <div style="font-size: 10px; color: #666; margin-bottom: 5px;">C-Buttons</div>
+                        <div class="c-buttons">
+                            <div class="c-btn empty"></div>
+                            <div class="c-btn" id="c-up">&#9650;</div>
+                            <div class="c-btn empty"></div>
+                            <div class="c-btn" id="c-left">&#9664;</div>
+                            <div class="c-btn empty"></div>
+                            <div class="c-btn" id="c-right">&#9654;</div>
+                            <div class="c-btn empty"></div>
+                            <div class="c-btn" id="c-down">&#9660;</div>
+                            <div class="c-btn empty"></div>
+                        </div>
+                    </div>
+
+                    <!-- Face Buttons -->
+                    <div style="text-align: center;">
+                        <div style="font-size: 10px; color: #666; margin-bottom: 5px;">Face</div>
+                        <div class="face-buttons">
+                            <div class="face-btn b-btn" id="face-b">B</div>
+                            <div class="face-btn a-btn" id="face-a">A</div>
+                        </div>
+                        <div style="margin-top: 10px;">
+                            <div class="face-btn start-btn" id="face-start" style="margin: 0 auto;">ST</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column: Raw Data + Info -->
+        <div class="column">
+            <div class="section raw-section">
+                <h2>Donnees Brutes</h2>
+                <div class="raw-data">
+                    <div><span class="label">ID:</span> <span class="value" id="gamepad-id">-</span></div>
+                    <div><span class="label">Count:</span> <span class="value" id="raw-count">-</span></div>
+                    <div><span class="label">Boutons:</span> <span class="value" id="raw-buttons">-</span></div>
+                    <div><span class="label">Hat:</span> <span class="value" id="raw-hat">-</span></div>
+                    <div><span class="label">Axes:</span> <span class="value" id="raw-axes">-</span></div>
+                </div>
+            </div>
+
+            <div class="section">
+                <h2>Instructions</h2>
+                <div class="instructions">
+                    <ol>
+                        <li>Connectez le Pico avec firmware N64-USB</li>
+                        <li>Branchez une manette N64</li>
+                        <li>Appuyez sur un bouton pour activer</li>
+                        <li>Testez boutons, D-Pad et joystick</li>
+                    </ol>
+                    <p style="margin-top: 8px;">
+                        Chrome, Firefox, Edge (Web Gamepad API)
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        N64-USB Gamepad Adapter |
+        <a href="https://developer.mozilla.org/en-US/docs/Web/API/Gamepad_API" target="_blank">Web Gamepad API</a>
+    </footer>
+
+    <script>
+        let activeGamepad = null;
+
+        // Handle gamepad connection
+        window.addEventListener('gamepadconnected', (e) => {
+            console.log('Gamepad connected:', e.gamepad);
+            activeGamepad = e.gamepad.index;
+            updateStatus(true, e.gamepad.id);
+        });
+
+        window.addEventListener('gamepaddisconnected', (e) => {
+            console.log('Gamepad disconnected:', e.gamepad);
+            if (e.gamepad.index === activeGamepad) {
+                activeGamepad = null;
+                updateStatus(false);
+            }
+        });
+
+        function updateStatus(connected, id = '') {
+            const statusEl = document.getElementById('status');
+            if (connected) {
+                statusEl.className = 'status connected';
+                // Truncate long IDs
+                const shortId = id.length > 40 ? id.substring(0, 40) + '...' : id;
+                statusEl.textContent = 'Connecte: ' + shortId;
+            } else {
+                statusEl.className = 'status disconnected';
+                statusEl.textContent = 'Aucune manette - Appuyez sur un bouton';
+            }
+        }
+
+        // Hat switch directions (clockwise from up)
+        const hatDirections = [
+            { up: true, right: false, down: false, left: false },   // 0: Up
+            { up: true, right: true, down: false, left: false },    // 1: Up-Right
+            { up: false, right: true, down: false, left: false },   // 2: Right
+            { up: false, right: true, down: true, left: false },    // 3: Down-Right
+            { up: false, right: false, down: true, left: false },   // 4: Down
+            { up: false, right: false, down: true, left: true },    // 5: Down-Left
+            { up: false, right: false, down: false, left: true },   // 6: Left
+            { up: true, right: false, down: false, left: true },    // 7: Up-Left
+        ];
+
+        function updateUI() {
+            const gamepads = navigator.getGamepads();
+
+            // Find first connected gamepad
+            let gamepad = null;
+            for (const gp of gamepads) {
+                if (gp) {
+                    gamepad = gp;
+                    if (activeGamepad === null) {
+                        activeGamepad = gp.index;
+                        updateStatus(true, gp.id);
+                    }
+                    break;
+                }
+            }
+
+            if (!gamepad) {
+                requestAnimationFrame(updateUI);
+                return;
+            }
+
+            // Update standard buttons grid
+            for (let i = 0; i < 10; i++) {
+                const btnEl = document.getElementById(`btn-${i}`);
+                if (btnEl && gamepad.buttons[i]) {
+                    btnEl.classList.toggle('pressed', gamepad.buttons[i].pressed);
+                }
+            }
+
+            // Update visual buttons
+            const btnA = gamepad.buttons[0]?.pressed || false;
+            const btnB = gamepad.buttons[1]?.pressed || false;
+            const btnZ = gamepad.buttons[2]?.pressed || false;
+            const btnL = gamepad.buttons[4]?.pressed || false;
+            const btnR = gamepad.buttons[5]?.pressed || false;
+            const btnStart = gamepad.buttons[9]?.pressed || false;
+
+            document.getElementById('face-a').classList.toggle('pressed', btnA);
+            document.getElementById('face-b').classList.toggle('pressed', btnB);
+            document.getElementById('face-start').classList.toggle('pressed', btnStart);
+            document.getElementById('trigger-l').classList.toggle('pressed', btnL);
+            document.getElementById('trigger-r').classList.toggle('pressed', btnR);
+            document.getElementById('trigger-z').classList.toggle('pressed', btnZ);
+
+            // C-Buttons
+            const cUp = gamepad.buttons[3]?.pressed || false;
+            const cDown = gamepad.buttons[6]?.pressed || false;
+            const cLeft = gamepad.buttons[7]?.pressed || false;
+            const cRight = gamepad.buttons[8]?.pressed || false;
+
+            document.getElementById('c-up').classList.toggle('pressed', cUp);
+            document.getElementById('c-down').classList.toggle('pressed', cDown);
+            document.getElementById('c-left').classList.toggle('pressed', cLeft);
+            document.getElementById('c-right').classList.toggle('pressed', cRight);
+
+            // Update D-Pad - try multiple detection methods
+            let hatValue = -1;
+
+            // Method 1: Check buttons 12-15 (standard gamepad D-Pad mapping)
+            const dpadUp = gamepad.buttons[12]?.pressed || false;
+            const dpadDown = gamepad.buttons[13]?.pressed || false;
+            const dpadLeft = gamepad.buttons[14]?.pressed || false;
+            const dpadRight = gamepad.buttons[15]?.pressed || false;
+
+            if (dpadUp || dpadDown || dpadLeft || dpadRight) {
+                document.getElementById('dpad-up').classList.toggle('pressed', dpadUp);
+                document.getElementById('dpad-down').classList.toggle('pressed', dpadDown);
+                document.getElementById('dpad-left').classList.toggle('pressed', dpadLeft);
+                document.getElementById('dpad-right').classList.toggle('pressed', dpadRight);
+            } else {
+                // Method 2: Check for hat switch as axis (axis 9 typically)
+                // Also check axes 2, 3, 4 as some browsers map it differently
+                let hatAxis = null;
+                for (const axisIdx of [9, 4, 5, 2]) {
+                    if (gamepad.axes[axisIdx] !== undefined) {
+                        hatAxis = gamepad.axes[axisIdx];
+                        break;
+                    }
+                }
+
+                if (hatAxis !== null && !isNaN(hatAxis)) {
+                    // Hat switch axis mapping:
+                    // Value 8 (center/null) maps to special values (typically > 1 or exactly 0)
+                    // Values 0-7 map to directions
+                    // Formula: axis = (hat / 3.5) - 1, so hat = (axis + 1) * 3.5
+
+                    if (hatAxis > 1.1 || (hatAxis > -0.05 && hatAxis < 0.05)) {
+                        // Center position (null state or exactly 0)
+                        hatValue = -1;
+                    } else {
+                        // Direction pressed - convert axis to hat value
+                        hatValue = Math.round((hatAxis + 1) * 3.5);
+                        if (hatValue < 0) hatValue = 0;
+                        if (hatValue > 7) hatValue = -1;
+                    }
+                }
+
+                // Apply hat direction
+                if (hatValue >= 0 && hatValue < 8) {
+                    const dir = hatDirections[hatValue];
+                    document.getElementById('dpad-up').classList.toggle('pressed', dir.up);
+                    document.getElementById('dpad-down').classList.toggle('pressed', dir.down);
+                    document.getElementById('dpad-left').classList.toggle('pressed', dir.left);
+                    document.getElementById('dpad-right').classList.toggle('pressed', dir.right);
+                } else {
+                    document.getElementById('dpad-up').classList.remove('pressed');
+                    document.getElementById('dpad-down').classList.remove('pressed');
+                    document.getElementById('dpad-left').classList.remove('pressed');
+                    document.getElementById('dpad-right').classList.remove('pressed');
+                }
+            }
+
+            // Update analog stick
+            const lx = gamepad.axes[0] || 0;
+            const ly = gamepad.axes[1] || 0;
+
+            const stick = document.getElementById('stick-left');
+            const stickSize = stick.offsetWidth;
+            const stickPos = document.getElementById('stick-left-pos');
+            const range = stickSize * 0.4;
+            const posX = (stickSize / 2) + (lx * range);
+            const posY = (stickSize / 2) + (ly * range);
+            stickPos.style.left = `${posX}px`;
+            stickPos.style.top = `${posY}px`;
+
+            // Update axis values (0-255 range)
+            const axisLx = Math.round((lx + 1) * 127.5);
+            const axisLy = Math.round((ly + 1) * 127.5);
+            document.getElementById('axis-lx').textContent = axisLx;
+            document.getElementById('axis-ly').textContent = axisLy;
+
+            // Update raw data
+            document.getElementById('gamepad-id').textContent = gamepad.id;
+            document.getElementById('raw-count').textContent =
+                `${gamepad.buttons.length} btns, ${gamepad.axes.length} axes`;
+
+            const buttonStates = [];
+            for (let i = 0; i < Math.min(gamepad.buttons.length, 16); i++) {
+                if (gamepad.buttons[i].pressed) {
+                    buttonStates.push(i);
+                }
+            }
+            document.getElementById('raw-buttons').textContent =
+                buttonStates.length > 0 ? buttonStates.join(', ') : 'none';
+
+            document.getElementById('raw-hat').textContent =
+                hatValue >= 0 ? `${hatValue} (${['Up','UpR','R','DnR','Dn','DnL','L','UpL'][hatValue]})` : 'center';
+
+            // Show all axes for debugging
+            const axesStr = gamepad.axes.map((a, i) => `${i}:${a.toFixed(2)}`).join(' ');
+            document.getElementById('raw-axes').textContent = axesStr || 'none';
+
+            requestAnimationFrame(updateUI);
+        }
+
+        // Start update loop
+        requestAnimationFrame(updateUI);
+    </script>
+</body>
+</html>

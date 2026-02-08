@@ -1,0 +1,94 @@
+; N64 Controller PIO Program
+; Handles the N64 controller's single-wire protocol
+; Protocol: 1MHz bitrate, 4us per bit (1us low + 3us high for '1', 3us low + 1us high for '0')
+
+.program n64_controller
+.side_set 1 opt pindirs
+
+; Timing constants (in cycles at 4MHz clock)
+.define public T1 4     ; Short pulse duration (1us)
+.define public T2 12    ; Long pulse duration (3us)
+
+.wrap_target
+    ; Load number of response bytes expected into Y
+    out y, 8 side 0
+
+    ; Wait for line to settle
+    nop [7]
+    nop [7]
+    nop [7]
+    nop [7]
+
+send_data:
+    ; Send data bit by bit (MSB first)
+    out x, 1  side 0 [T1 - 1]           ; Get bit, hold low for T1
+    jmp !x do_zero side 1 [T1 - 1]      ; If bit is 0, jump to do_zero
+
+do_one:
+    ; Send '1': short low (T1), long high (T2)
+    jmp !OSRE send_data side 0 [T1 * 2 - 1]   ; Hold high, continue if more bits
+    jmp send_stop [T1 - 1]
+
+do_zero:
+    ; Send '0': long low (T2), short high (T1)
+    jmp !OSRE send_data [T1 * 2 - 1]    ; Continue if more bits
+    jmp send_stop side 0 [T1 - 1]
+
+send_stop:
+    ; Send stop bit (short low, then release high)
+    nop side 1 [T1 - 1]
+    nop side 0
+
+receive_byte:
+    ; Receive one byte (8 bits)
+    set x, 7                            ; Bit counter (7 downto 0)
+
+get_bit:
+    wait 0 pin 0 [T1 + 1]               ; Wait for line to go low, then sample
+    in pins 1                           ; Read data bit
+    wait 1 pin 0                        ; Wait for line to go high
+    jmp x-- get_bit                     ; Next bit
+    jmp y-- receive_byte                ; Next byte
+
+.wrap
+
+
+% c-sdk {
+#include "hardware/clocks.h"
+#include "hardware/pio.h"
+
+/**
+ * Initialize PIO state machine for N64 controller communication
+ * @param pio PIO instance to use
+ * @param sm State machine number
+ * @param offset Program offset in PIO instruction memory
+ * @param pin GPIO pin for data line
+ * @param c Pointer to state machine config (will be modified)
+ */
+static inline void n64_controller_program_init(PIO pio, uint sm, uint offset,
+                                                uint pin, pio_sm_config *c) {
+    // Configure pin as input/output (open-drain style)
+    pio_sm_set_consecutive_pindirs(pio, sm, pin, 1, false);
+    pio_gpio_init(pio, pin);
+
+    // Configure state machine pins
+    sm_config_set_in_pins(c, pin);          // IN instruction reads from pin
+    sm_config_set_sideset_pins(c, pin);     // Side-set controls pin direction
+    sm_config_set_jmp_pin(c, pin);          // JMP PIN uses same pin
+
+    // Configure shift registers
+    sm_config_set_out_shift(c, false, true, 8);     // Shift left, autopull at 8 bits
+    sm_config_set_in_shift(c, false, true, 8);      // Shift left, autopush at 8 bits
+
+    // Calculate clock divider for 4MHz (T1 + T2 = 16 cycles per 4us bit)
+    int cycles_per_bit = (n64_controller_T1 + n64_controller_T2) / 4;
+    float frequency = 1000000.0f;  // 1MHz bit rate
+    float clock_div = clock_get_hz(clk_sys) / (cycles_per_bit * frequency);
+    sm_config_set_clkdiv(c, clock_div);
+
+    // Initialize and enable state machine
+    pio_sm_init(pio, sm, offset, c);
+    pio_sm_set_enabled(pio, sm, true);
+}
+
+%}
