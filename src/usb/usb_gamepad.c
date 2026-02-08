@@ -1,6 +1,7 @@
 /*
  * USB HID Gamepad Implementation
  * Converts N64 controller state to USB HID gamepad report
+ * Supports dual controllers with Report IDs
  */
 
 #include "usb_gamepad.h"
@@ -60,9 +61,20 @@ uint8_t map_dpad_to_hat(uint8_t dpad) {
     return dpad_to_hat[dpad & 0x0F];
 }
 
-void n64_to_usb_report(const n64_state_t *n64, usb_gamepad_report_t *usb) {
-    // Clear report
-    memset(usb, 0, sizeof(*usb));
+void usb_gamepad_init_neutral(usb_gamepad_report_t *usb, uint8_t report_id) {
+    usb->report_id = report_id;
+    usb->buttons = 0;
+    usb->hat = HAT_CENTER;
+    usb->lx = JOYSTICK_CENTER;
+    usb->ly = JOYSTICK_CENTER;
+}
+
+void n64_to_usb_report(const n64_state_t *n64, usb_gamepad_report_t *usb, uint8_t report_id) {
+    // Set report ID
+    usb->report_id = report_id;
+
+    // Clear buttons
+    usb->buttons = 0;
 
     // Map buttons from byte 0 (A, B, Z, Start)
     if (n64->buttons0 & N64_MASK_A) {
@@ -115,8 +127,8 @@ bool usb_gamepad_send_report(const usb_gamepad_report_t *report) {
         return false;
     }
 
-    // Send HID report (report ID = 0 for single report)
-    return tud_hid_report(0, report, sizeof(usb_gamepad_report_t));
+    // Send HID report with report ID
+    return tud_hid_report(report->report_id, &report->buttons, sizeof(usb_gamepad_report_t) - 1);
 }
 
 //--------------------------------------------------------------------

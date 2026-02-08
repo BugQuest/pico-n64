@@ -1,25 +1,30 @@
-# N64-USB Gamepad Adapter
+# N64-USB Dual Gamepad Adapter
 
-Adaptateur Raspberry Pi Pico convertissant une manette Nintendo 64 en gamepad USB HID standard compatible Windows/Linux/macOS.
+Adaptateur Raspberry Pi Pico convertissant jusqu'à 2 manettes Nintendo 64 en gamepads USB HID standard compatible Windows/Linux/macOS.
 
 ## Fonctionnalités
 
+- Support de 1 ou 2 manettes N64 simultanément
 - Compatible avec toutes les manettes N64 officielles et clones
-- Reconnaissance automatique comme gamepad USB standard (pas de drivers)
+- Reconnaissance automatique comme gamepad(s) USB standard (pas de drivers)
+- Détection dynamique : 0, 1 ou 2 manettes
 - Polling rate 125Hz (8ms de latence)
-- Hot-plug de la manette N64 supporté
+- Hot-plug des manettes N64 supporté
 - LED de statut intégrée
+- LEDs externes optionnelles (1 par manette)
 - Outil de test web inclus
 
 ## Matériel requis
 
 - Raspberry Pi Pico (RP2040)
-- Connecteur manette N64 (ou câble extension coupé)
-- Résistance 1KΩ (pull-up)
+- 1 ou 2 connecteurs manette N64 (ou câbles extension coupés)
+- 1 ou 2 résistances 1KΩ (pull-up)
 - Fils de connexion
+- (Optionnel) 1 ou 2 LEDs + résistances 220Ω-330Ω pour indicateurs externes
 
 ## Câblage
 
+### Manette 1 (obligatoire)
 ```
 N64 Connector (vue de face)
   _________
@@ -32,7 +37,22 @@ Pin 2 (Data) → Pico GP18 + résistance 1KΩ vers 3.3V
 Pin 3 (3.3V) → Pico 3V3(OUT)
 ```
 
-**Important** : La résistance pull-up de 1KΩ entre GP18 et 3.3V est obligatoire.
+### Manette 2 (optionnelle)
+```
+Pin 1 (GND)  → Pico GND (partagé)
+Pin 2 (Data) → Pico GP19 + résistance 1KΩ vers 3.3V
+Pin 3 (3.3V) → Pico 3V3(OUT) (partagé)
+```
+
+**Important** : Chaque manette nécessite sa propre résistance pull-up de 1KΩ.
+
+### LEDs externes (optionnelles)
+```
+LED 1 (manette 1) : GP16 → résistance 220-330Ω → LED → GND
+LED 2 (manette 2) : GP17 → résistance 220-330Ω → LED → GND
+```
+
+Les LEDs s'allument quand la manette correspondante est connectée. Pour désactiver, mettre le pin à 0 dans `include/n64_controller.h`.
 
 ## Compilation
 
@@ -68,14 +88,27 @@ cmake --build build
 
 ## LED de statut
 
+### LED intégrée (GP25)
+
 | État LED | Signification |
 |----------|---------------|
 | Éteinte | USB non connecté au PC |
-| Clignotement lent (500ms) | Attente manette N64 |
-| Clignotement rapide (100ms) | Erreur PIO |
-| Allumée fixe | Fonctionnement normal |
+| Clignotement lent (1s) | Aucune manette N64 connectée |
+| Clignotement moyen (300ms) | 1 manette N64 connectée |
+| Allumée fixe | 2 manettes N64 connectées |
+
+### LEDs externes (optionnelles)
+
+| LED | État | Signification |
+|-----|------|---------------|
+| LED 1 (GP16) | Allumée | Manette 1 connectée |
+| LED 1 (GP16) | Éteinte | Manette 1 déconnectée |
+| LED 2 (GP17) | Allumée | Manette 2 connectée |
+| LED 2 (GP17) | Éteinte | Manette 2 déconnectée |
 
 ## Mapping des boutons
+
+Chaque manette est exposée comme un gamepad USB séparé avec le même mapping :
 
 | Bouton N64 | USB Button | Index |
 |------------|------------|-------|
@@ -96,6 +129,8 @@ cmake --build build
 
 Ouvrir `tools/gamepad_tester.html` dans un navigateur (Chrome, Firefox, Edge) pour tester tous les boutons et axes en temps réel.
 
+**Note** : Avec 2 manettes, le navigateur détectera 2 gamepads séparés.
+
 ## Architecture du projet
 
 ```
@@ -103,16 +138,16 @@ pico-n64/
 ├── include/
 │   ├── tusb_config.h        # Configuration TinyUSB
 │   ├── n64_protocol.h       # Constantes protocole N64
-│   ├── n64_controller.h     # Interface contrôleur N64
-│   ├── usb_descriptors.h    # Descripteurs USB HID
-│   └── usb_gamepad.h        # Interface gamepad USB
+│   ├── n64_controller.h     # Interface contrôleur N64 (dual)
+│   ├── usb_descriptors.h    # Descripteurs USB HID (dual)
+│   └── usb_gamepad.h        # Interface gamepad USB (dual)
 ├── src/
-│   ├── main.c               # Point d'entrée, boucle principale
+│   ├── main.c               # Point d'entrée, gestion 2 manettes
 │   ├── n64/
 │   │   ├── n64_controller.pio   # Programme PIO (protocole N64)
 │   │   └── n64_controller.c     # Communication manette
 │   └── usb/
-│       ├── usb_descriptors.c    # Descripteurs USB
+│       ├── usb_descriptors.c    # Descripteurs USB (Report IDs)
 │       └── usb_gamepad.c        # Conversion N64 → USB HID
 ├── tools/
 │   └── gamepad_tester.html  # Outil de test web
@@ -126,7 +161,10 @@ Les paramètres modifiables sont dans les fichiers suivants :
 
 | Paramètre | Fichier | Valeur par défaut |
 |-----------|---------|-------------------|
-| Pin données N64 | `include/n64_controller.h` | GP18 |
+| Pin manette 1 | `include/n64_controller.h` | GP18 |
+| Pin manette 2 | `include/n64_controller.h` | GP19 |
+| LED externe 1 | `include/n64_controller.h` | GP16 (0 = désactivée) |
+| LED externe 2 | `include/n64_controller.h` | GP17 (0 = désactivée) |
 | Polling rate | `src/main.c` | 8ms (125Hz) |
 | USB VID | `include/usb_descriptors.h` | 0x1209 |
 | USB PID | `include/usb_descriptors.h` | 0x6E34 |
@@ -138,18 +176,18 @@ Le protocole N64 utilise une ligne de données unique (open-drain) :
 - Timing : 4µs par bit (1µs low + 3µs high pour '1', 3µs low + 1µs high pour '0')
 - Commandes : 0x00 (info), 0x01 (status)
 
-L'implémentation utilise le PIO du RP2040 pour un timing précis.
+L'implémentation utilise le PIO du RP2040 pour un timing précis. Chaque manette utilise un state machine PIO dédié.
 
 ## Dépannage
 
-### La LED clignote lentement
-- Vérifier que la manette N64 est bien branchée
+### La LED clignote lentement (aucune manette)
+- Vérifier que la/les manette(s) N64 sont bien branchées
 - Vérifier le câblage (GND, Data, 3.3V)
-- Vérifier la résistance pull-up de 1KΩ
+- Vérifier les résistances pull-up de 1KΩ
 
-### La LED clignote rapidement
-- Erreur d'initialisation PIO
-- Reflasher le firmware
+### La LED clignote moyennement (1 seule manette détectée)
+- Normal si une seule manette est branchée
+- Si 2 manettes sont branchées, vérifier le câblage de la 2ème
 
 ### Le stick analogique dérive
 - Normal sur les vieilles manettes N64 (usure mécanique)
@@ -158,6 +196,10 @@ L'implémentation utilise le PIO du RP2040 pour un timing précis.
 ### D-Pad ne fonctionne pas dans certains jeux
 - Certains jeux ne supportent que les axes ou les boutons
 - Utiliser un remapper comme JoyToKey
+
+### Une seule manette apparaît dans Windows
+- Débrancher et rebrancher l'USB
+- Vérifier dans "Configurer les contrôleurs de jeu USB"
 
 ## Licence
 

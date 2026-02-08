@@ -1,8 +1,9 @@
 /*
- * N64-USB Gamepad Adapter
+ * N64-USB Dual Gamepad Adapter
  * Main Application for Raspberry Pi Pico
  *
- * Converts N64 controller input to USB HID gamepad
+ * Converts up to 2 N64 controllers to USB HID gamepads
+ * Dynamically detects 0, 1, or 2 connected controllers
  */
 
 #include <stdio.h>
@@ -13,6 +14,7 @@
 #include "n64_controller.h"
 #include "n64_protocol.h"
 #include "usb_gamepad.h"
+#include "usb_descriptors.h"
 
 //--------------------------------------------------------------------
 // Configuration
@@ -25,23 +27,58 @@
 //--------------------------------------------------------------------
 typedef enum {
     LED_OFF,                // USB not connected
-    LED_BLINK_SLOW,         // Waiting for N64 controller
-    LED_BLINK_FAST,         // Error
-    LED_ON                  // Normal operation
+    LED_BLINK_SLOW,         // No controllers connected
+    LED_BLINK_MEDIUM,       // 1 controller connected
+    LED_ON                  // 2 controllers connected (or error if fast)
 } led_status_t;
 
 //--------------------------------------------------------------------
 // Global Variables
 //--------------------------------------------------------------------
-static n64_controller_t g_controller;
-static n64_state_t g_state;
-static usb_gamepad_report_t g_report;
+static n64_controller_t g_controllers[MAX_CONTROLLERS];
+static n64_state_t g_states[MAX_CONTROLLERS];
+static usb_gamepad_report_t g_reports[MAX_CONTROLLERS];
 static led_status_t g_led_status = LED_OFF;
 static uint32_t g_last_led_toggle = 0;
 static bool g_led_state = false;
+static bool g_pio_init_ok = false;
+
+// Report IDs for each controller
+static const uint8_t g_report_ids[MAX_CONTROLLERS] = {
+    REPORT_ID_GAMEPAD1,
+    REPORT_ID_GAMEPAD2
+};
+
+// External LED states
+static bool g_ext_leds_enabled[MAX_CONTROLLERS] = {false, false};
 
 //--------------------------------------------------------------------
-// LED Management
+// External LED Management (optional per-controller LEDs)
+//--------------------------------------------------------------------
+static void init_external_leds(void) {
+    for (int i = 0; i < MAX_CONTROLLERS; i++) {
+        uint pin = N64_LED_PINS[i];
+        if (pin != 0) {
+            gpio_init(pin);
+            gpio_set_dir(pin, GPIO_OUT);
+            gpio_put(pin, false);
+            g_ext_leds_enabled[i] = true;
+            printf("  External LED %d on GP%d: OK\n", i + 1, pin);
+        }
+    }
+}
+
+static void update_external_leds(void) {
+    for (int i = 0; i < MAX_CONTROLLERS; i++) {
+        if (g_ext_leds_enabled[i]) {
+            // LED ON when controller is connected, OFF otherwise
+            gpio_put(N64_LED_PINS[i], g_controllers[i].connected);
+        }
+    }
+}
+
+//--------------------------------------------------------------------
+// Built-in LED Management
 //--------------------------------------------------------------------
 static void update_led(void) {
     uint32_t now = to_ms_since_boot(get_absolute_time());
@@ -52,15 +89,17 @@ static void update_led(void) {
             break;
 
         case LED_BLINK_SLOW:
-            if (now - g_last_led_toggle > 500) {
+            // No controllers - slow blink (1000ms)
+            if (now - g_last_led_toggle > 1000) {
                 g_led_state = !g_led_state;
                 gpio_put(LED_PIN, g_led_state);
                 g_last_led_toggle = now;
             }
             break;
 
-        case LED_BLINK_FAST:
-            if (now - g_last_led_toggle > 100) {
+        case LED_BLINK_MEDIUM:
+            // 1 controller - medium blink (300ms)
+            if (now - g_last_led_toggle > 300) {
                 g_led_state = !g_led_state;
                 gpio_put(LED_PIN, g_led_state);
                 g_last_led_toggle = now;
@@ -68,7 +107,50 @@ static void update_led(void) {
             break;
 
         case LED_ON:
+            // 2 controllers - solid on
             gpio_put(LED_PIN, true);
+            break;
+    }
+}
+
+//--------------------------------------------------------------------
+// Count connected controllers
+//--------------------------------------------------------------------
+static uint8_t count_connected(void) {
+    uint8_t count = 0;
+    for (int i = 0; i < MAX_CONTROLLERS; i++) {
+        if (g_controllers[i].connected) {
+            count++;
+        }
+    }
+    return count;
+}
+
+//--------------------------------------------------------------------
+// Update LED based on connection status
+//--------------------------------------------------------------------
+static void update_led_status(void) {
+    if (!tud_mounted()) {
+        g_led_status = LED_OFF;
+        return;
+    }
+
+    if (!g_pio_init_ok) {
+        // Fast blink for error (reuse BLINK_SLOW with shorter toggle in update)
+        g_led_status = LED_BLINK_SLOW;
+        return;
+    }
+
+    uint8_t connected = count_connected();
+    switch (connected) {
+        case 0:
+            g_led_status = LED_BLINK_SLOW;
+            break;
+        case 1:
+            g_led_status = LED_BLINK_MEDIUM;
+            break;
+        default:
+            g_led_status = LED_ON;
             break;
     }
 }
@@ -88,20 +170,34 @@ int main(void) {
     // Initialize TinyUSB
     tusb_init();
 
-    // Initialize N64 controller
-    printf("N64-USB Gamepad Adapter\n");
-    printf("Initializing N64 controller on GP%d...\n", N64_DATA_PIN);
+    // Initialize N64 controllers
+    printf("N64-USB Dual Gamepad Adapter\n");
+    printf("Initializing %d controller ports...\n", MAX_CONTROLLERS);
 
-    if (!n64_init(&g_controller, N64_DATA_PIN)) {
-        printf("ERROR: Failed to initialize PIO for N64 controller\n");
-        g_led_status = LED_BLINK_FAST;
-        while (1) {
-            update_led();
-            sleep_ms(10);
+    g_pio_init_ok = true;
+    for (int i = 0; i < MAX_CONTROLLERS; i++) {
+        printf("  Controller %d on GP%d: ", i + 1, N64_DATA_PINS[i]);
+
+        if (n64_init(&g_controllers[i], N64_DATA_PINS[i])) {
+            printf("OK\n");
+        } else {
+            printf("FAILED (PIO unavailable)\n");
+            g_pio_init_ok = false;
         }
+
+        // Initialize neutral reports
+        usb_gamepad_init_neutral(&g_reports[i], g_report_ids[i]);
     }
 
-    printf("N64 controller initialized\n");
+    if (!g_pio_init_ok) {
+        printf("ERROR: Not all controllers could be initialized\n");
+    }
+
+    // Initialize optional external LEDs
+    printf("Initializing external LEDs...\n");
+    init_external_leds();
+
+    printf("Waiting for controllers...\n");
     g_led_status = LED_BLINK_SLOW;
 
     // Main loop
@@ -114,7 +210,7 @@ int main(void) {
         // Update LED
         update_led();
 
-        // Poll controller at fixed interval
+        // Poll controllers at fixed interval
         uint32_t now = to_ms_since_boot(get_absolute_time());
         if (now - last_poll < POLL_INTERVAL_MS) {
             continue;
@@ -127,27 +223,23 @@ int main(void) {
             continue;
         }
 
-        // Read N64 controller
-        if (n64_read(&g_controller, &g_state)) {
-            // Controller connected and responding
-            g_led_status = LED_ON;
+        // Read all controllers and send reports
+        for (int i = 0; i < MAX_CONTROLLERS; i++) {
+            if (n64_read(&g_controllers[i], &g_states[i])) {
+                // Controller connected and responding
+                n64_to_usb_report(&g_states[i], &g_reports[i], g_report_ids[i]);
+            } else {
+                // Controller not responding - send neutral report
+                usb_gamepad_init_neutral(&g_reports[i], g_report_ids[i]);
+            }
 
-            // Convert to USB report
-            n64_to_usb_report(&g_state, &g_report);
-
-            // Send USB HID report
-            usb_gamepad_send_report(&g_report);
-        } else {
-            // Controller not responding
-            g_led_status = LED_BLINK_SLOW;
-
-            // Send neutral report (all buttons released, stick centered)
-            g_report.buttons = 0;
-            g_report.hat = HAT_CENTER;
-            g_report.lx = JOYSTICK_CENTER;
-            g_report.ly = JOYSTICK_CENTER;
-            usb_gamepad_send_report(&g_report);
+            // Always send report (allows detection of disconnected controllers)
+            usb_gamepad_send_report(&g_reports[i]);
         }
+
+        // Update LED status based on connected controllers
+        update_led_status();
+        update_external_leds();
     }
 
     return 0;

@@ -1,12 +1,17 @@
 /*
  * USB Descriptors for N64-USB Gamepad
- * Standard USB HID gamepad compatible with Windows/Linux/macOS
+ * Dual gamepad support - USB composite device
  */
 
 #ifndef USB_DESCRIPTORS_H
 #define USB_DESCRIPTORS_H
 
 #include <stdint.h>
+
+//--------------------------------------------------------------------
+// Configuration
+//--------------------------------------------------------------------
+#define MAX_CONTROLLERS     2           // Maximum number of controllers
 
 //--------------------------------------------------------------------
 // USB IDs
@@ -24,9 +29,17 @@
 #define STRID_SERIAL        3
 
 //--------------------------------------------------------------------
-// HID Report ID (not used, single report)
+// HID Report IDs (for multi-gamepad support)
 //--------------------------------------------------------------------
-#define REPORT_ID_GAMEPAD   0
+#define REPORT_ID_GAMEPAD1  1
+#define REPORT_ID_GAMEPAD2  2
+
+//--------------------------------------------------------------------
+// Interface Numbers
+//--------------------------------------------------------------------
+#define ITF_NUM_HID1        0
+#define ITF_NUM_HID2        1
+#define ITF_NUM_TOTAL       2
 
 //--------------------------------------------------------------------
 // External Declarations (defined in usb_descriptors.c)

@@ -1,6 +1,7 @@
 /*
  * N64 Controller Interface
  * Functions for communicating with N64 controller via PIO
+ * Supports dual controllers
  */
 
 #ifndef N64_CONTROLLER_H
@@ -10,11 +11,33 @@
 #include <stdbool.h>
 #include "hardware/pio.h"
 #include "n64_protocol.h"
+#include "usb_descriptors.h"
 
 //--------------------------------------------------------------------
-// Configuration
+// Configuration - GPIO Pins for N64 data lines
 //--------------------------------------------------------------------
-#define N64_DATA_PIN        18      // GPIO pin for N64 data line
+#define N64_DATA_PIN_1      18      // GPIO pin for controller 1
+#define N64_DATA_PIN_2      19      // GPIO pin for controller 2
+
+// Array of pins for easy iteration
+static const uint N64_DATA_PINS[MAX_CONTROLLERS] = {
+    N64_DATA_PIN_1,
+    N64_DATA_PIN_2
+};
+
+//--------------------------------------------------------------------
+// Configuration - Optional External Status LEDs
+// Set to 0 to disable, or GPIO pin number to enable
+// LEDs are active HIGH (on when controller connected)
+//--------------------------------------------------------------------
+#define N64_LED_PIN_1       16      // External LED for controller 1 (0 = disabled)
+#define N64_LED_PIN_2       17      // External LED for controller 2 (0 = disabled)
+
+// Array of LED pins for easy iteration
+static const uint N64_LED_PINS[MAX_CONTROLLERS] = {
+    N64_LED_PIN_1,
+    N64_LED_PIN_2
+};
 
 //--------------------------------------------------------------------
 // N64 Controller Handle

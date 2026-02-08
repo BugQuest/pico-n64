@@ -1,6 +1,7 @@
 /*
  * USB HID Gamepad Interface
  * Converts N64 controller state to USB HID gamepad report
+ * Supports dual controllers
  */
 
 #ifndef USB_GAMEPAD_H
@@ -9,12 +10,15 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "n64_protocol.h"
+#include "usb_descriptors.h"
 
 //--------------------------------------------------------------------
 // USB HID Gamepad Report Structure
 // Compatible with standard USB HID gamepad specification
+// Includes Report ID for multi-gamepad support
 //--------------------------------------------------------------------
 typedef struct __attribute__((packed)) {
+    uint8_t  report_id;     // Report ID (1 or 2)
     uint16_t buttons;       // 16 buttons (bits 0-15)
     uint8_t  hat;           // D-Pad as 8-way hat switch (0-7, 8=centered)
     uint8_t  lx;            // Left stick X (0-255, 128=center)
@@ -63,8 +67,16 @@ typedef struct __attribute__((packed)) {
  * Convert N64 controller state to USB HID gamepad report
  * @param n64 Pointer to N64 controller state
  * @param usb Pointer to USB report structure to fill
+ * @param report_id Report ID (REPORT_ID_GAMEPAD1 or REPORT_ID_GAMEPAD2)
  */
-void n64_to_usb_report(const n64_state_t *n64, usb_gamepad_report_t *usb);
+void n64_to_usb_report(const n64_state_t *n64, usb_gamepad_report_t *usb, uint8_t report_id);
+
+/**
+ * Initialize a neutral (centered, no buttons) report
+ * @param usb Pointer to USB report structure to fill
+ * @param report_id Report ID (REPORT_ID_GAMEPAD1 or REPORT_ID_GAMEPAD2)
+ */
+void usb_gamepad_init_neutral(usb_gamepad_report_t *usb, uint8_t report_id);
 
 /**
  * Scale N64 joystick axis value to USB HID range
