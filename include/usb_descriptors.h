@@ -29,22 +29,10 @@
 #define STRID_SERIAL        3
 
 //--------------------------------------------------------------------
-// HID Report IDs (for multi-gamepad support)
-//--------------------------------------------------------------------
-#define REPORT_ID_GAMEPAD1  1
-#define REPORT_ID_GAMEPAD2  2
-
-//--------------------------------------------------------------------
-// Interface Numbers
+// Interface Numbers (one HID interface per gamepad)
 //--------------------------------------------------------------------
 #define ITF_NUM_HID1        0
 #define ITF_NUM_HID2        1
 #define ITF_NUM_TOTAL       2
-
-//--------------------------------------------------------------------
-// External Declarations (defined in usb_descriptors.c)
-//--------------------------------------------------------------------
-extern const uint8_t hid_report_descriptor[];
-extern const uint16_t hid_report_descriptor_len;
 
 #endif /* USB_DESCRIPTORS_H */

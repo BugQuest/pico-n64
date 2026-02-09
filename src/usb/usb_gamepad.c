@@ -1,7 +1,7 @@
 /*
  * USB HID Gamepad Implementation
  * Converts N64 controller state to USB HID gamepad report
- * Supports dual controllers with Report IDs
+ * Supports dual controllers via separate HID interfaces
  */
 
 #include "usb_gamepad.h"
@@ -61,18 +61,14 @@ uint8_t map_dpad_to_hat(uint8_t dpad) {
     return dpad_to_hat[dpad & 0x0F];
 }
 
-void usb_gamepad_init_neutral(usb_gamepad_report_t *usb, uint8_t report_id) {
-    usb->report_id = report_id;
+void usb_gamepad_init_neutral(usb_gamepad_report_t *usb) {
     usb->buttons = 0;
     usb->hat = HAT_CENTER;
     usb->lx = JOYSTICK_CENTER;
     usb->ly = JOYSTICK_CENTER;
 }
 
-void n64_to_usb_report(const n64_state_t *n64, usb_gamepad_report_t *usb, uint8_t report_id) {
-    // Set report ID
-    usb->report_id = report_id;
-
+void n64_to_usb_report(const n64_state_t *n64, usb_gamepad_report_t *usb) {
     // Clear buttons
     usb->buttons = 0;
 
@@ -121,14 +117,14 @@ void n64_to_usb_report(const n64_state_t *n64, usb_gamepad_report_t *usb, uint8_
     usb->ly = 255 - scale_n64_axis(n64->stick_y);  // Invert Y
 }
 
-bool usb_gamepad_send_report(const usb_gamepad_report_t *report) {
-    // Only send if USB is ready
-    if (!tud_hid_ready()) {
+bool usb_gamepad_send_report(uint8_t instance, const usb_gamepad_report_t *report) {
+    // Only send if this HID instance is ready
+    if (!tud_hid_n_ready(instance)) {
         return false;
     }
 
-    // Send HID report with report ID
-    return tud_hid_report(report->report_id, &report->buttons, sizeof(usb_gamepad_report_t) - 1);
+    // Send HID report on specific instance (report_id=0, no Report ID prefix)
+    return tud_hid_n_report(instance, 0, report, sizeof(usb_gamepad_report_t));
 }
 
 //--------------------------------------------------------------------

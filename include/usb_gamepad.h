@@ -1,7 +1,7 @@
 /*
  * USB HID Gamepad Interface
  * Converts N64 controller state to USB HID gamepad report
- * Supports dual controllers
+ * Supports dual controllers via separate HID interfaces
  */
 
 #ifndef USB_GAMEPAD_H
@@ -14,11 +14,9 @@
 
 //--------------------------------------------------------------------
 // USB HID Gamepad Report Structure
-// Compatible with standard USB HID gamepad specification
-// Includes Report ID for multi-gamepad support
+// No Report ID - each gamepad has its own HID interface
 //--------------------------------------------------------------------
 typedef struct __attribute__((packed)) {
-    uint8_t  report_id;     // Report ID (1 or 2)
     uint16_t buttons;       // 16 buttons (bits 0-15)
     uint8_t  hat;           // D-Pad as 8-way hat switch (0-7, 8=centered)
     uint8_t  lx;            // Left stick X (0-255, 128=center)
@@ -67,16 +65,14 @@ typedef struct __attribute__((packed)) {
  * Convert N64 controller state to USB HID gamepad report
  * @param n64 Pointer to N64 controller state
  * @param usb Pointer to USB report structure to fill
- * @param report_id Report ID (REPORT_ID_GAMEPAD1 or REPORT_ID_GAMEPAD2)
  */
-void n64_to_usb_report(const n64_state_t *n64, usb_gamepad_report_t *usb, uint8_t report_id);
+void n64_to_usb_report(const n64_state_t *n64, usb_gamepad_report_t *usb);
 
 /**
  * Initialize a neutral (centered, no buttons) report
  * @param usb Pointer to USB report structure to fill
- * @param report_id Report ID (REPORT_ID_GAMEPAD1 or REPORT_ID_GAMEPAD2)
  */
-void usb_gamepad_init_neutral(usb_gamepad_report_t *usb, uint8_t report_id);
+void usb_gamepad_init_neutral(usb_gamepad_report_t *usb);
 
 /**
  * Scale N64 joystick axis value to USB HID range
@@ -93,10 +89,11 @@ uint8_t scale_n64_axis(int8_t n64_value);
 uint8_t map_dpad_to_hat(uint8_t dpad);
 
 /**
- * Send USB HID gamepad report
+ * Send USB HID gamepad report on a specific HID instance
+ * @param instance HID instance index (0 = P1, 1 = P2)
  * @param report Pointer to report to send
  * @return true if report sent successfully
  */
-bool usb_gamepad_send_report(const usb_gamepad_report_t *report);
+bool usb_gamepad_send_report(uint8_t instance, const usb_gamepad_report_t *report);
 
 #endif /* USB_GAMEPAD_H */

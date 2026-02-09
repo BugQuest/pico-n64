@@ -60,8 +60,8 @@ extern "C" {
 #endif
 
 //------------- CLASS -------------//
-// Enable HID class
-#define CFG_TUD_HID 1
+// Enable HID class (2 instances = 2 separate gamepad interfaces)
+#define CFG_TUD_HID 2
 
 // HID buffer size - must be large enough for our report
 #define CFG_TUD_HID_EP_BUFSIZE 16

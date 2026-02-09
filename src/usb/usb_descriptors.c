@@ -1,66 +1,19 @@
 /*
  * USB Descriptors Implementation for N64-USB Gamepad
- * Dual gamepad support - USB composite device with 2 HID interfaces
+ * Dual gamepad support - 2 separate HID interfaces, one per controller
  */
 
 #include "usb_descriptors.h"
 #include "tusb.h"
 
 //--------------------------------------------------------------------
-// HID Report Descriptor
-// Two gamepads with Report IDs for differentiation
+// HID Report Descriptor (single gamepad, no Report ID)
+// Same descriptor used for both interfaces
 //--------------------------------------------------------------------
-const uint8_t hid_report_descriptor[] = {
-    // Gamepad 1
+static const uint8_t hid_report_descriptor_single[] = {
     0x05, 0x01,        // Usage Page (Generic Desktop)
     0x09, 0x05,        // Usage (Game Pad)
     0xA1, 0x01,        // Collection (Application)
-    0x85, REPORT_ID_GAMEPAD1,  //   Report ID (1)
-
-    // 16 Buttons (only first 10 used)
-    0x05, 0x09,        //   Usage Page (Button)
-    0x19, 0x01,        //   Usage Minimum (Button 1)
-    0x29, 0x10,        //   Usage Maximum (Button 16)
-    0x15, 0x00,        //   Logical Minimum (0)
-    0x25, 0x01,        //   Logical Maximum (1)
-    0x75, 0x01,        //   Report Size (1)
-    0x95, 0x10,        //   Report Count (16)
-    0x81, 0x02,        //   Input (Data, Var, Abs)
-
-    // Hat Switch (D-Pad) - 4 bits
-    0x05, 0x01,        //   Usage Page (Generic Desktop)
-    0x09, 0x39,        //   Usage (Hat Switch)
-    0x15, 0x00,        //   Logical Minimum (0)
-    0x25, 0x07,        //   Logical Maximum (7)
-    0x35, 0x00,        //   Physical Minimum (0)
-    0x46, 0x3B, 0x01,  //   Physical Maximum (315)
-    0x65, 0x14,        //   Unit (English Rotation: Degree)
-    0x75, 0x04,        //   Report Size (4)
-    0x95, 0x01,        //   Report Count (1)
-    0x81, 0x42,        //   Input (Data, Var, Abs, Null State)
-
-    // Padding - 4 bits
-    0x75, 0x04,        //   Report Size (4)
-    0x95, 0x01,        //   Report Count (1)
-    0x81, 0x03,        //   Input (Const, Var, Abs)
-
-    // Left Stick X and Y - 2 axes, 8-bit each
-    0x05, 0x01,        //   Usage Page (Generic Desktop)
-    0x09, 0x30,        //   Usage (X)
-    0x09, 0x31,        //   Usage (Y)
-    0x15, 0x00,        //   Logical Minimum (0)
-    0x26, 0xFF, 0x00,  //   Logical Maximum (255)
-    0x75, 0x08,        //   Report Size (8)
-    0x95, 0x02,        //   Report Count (2)
-    0x81, 0x02,        //   Input (Data, Var, Abs)
-
-    0xC0,              // End Collection
-
-    // Gamepad 2
-    0x05, 0x01,        // Usage Page (Generic Desktop)
-    0x09, 0x05,        // Usage (Game Pad)
-    0xA1, 0x01,        // Collection (Application)
-    0x85, REPORT_ID_GAMEPAD2,  //   Report ID (2)
 
     // 16 Buttons (only first 10 used)
     0x05, 0x09,        //   Usage Page (Button)
@@ -102,8 +55,6 @@ const uint8_t hid_report_descriptor[] = {
     0xC0               // End Collection
 };
 
-const uint16_t hid_report_descriptor_len = sizeof(hid_report_descriptor);
-
 //--------------------------------------------------------------------
 // Device Descriptor
 //--------------------------------------------------------------------
@@ -117,7 +68,7 @@ static const tusb_desc_device_t device_descriptor = {
     .bMaxPacketSize0    = CFG_TUD_ENDPOINT0_SIZE,
     .idVendor           = USB_VID,
     .idProduct          = USB_PID,
-    .bcdDevice          = 0x0200,               // Version 2.0 (dual gamepad)
+    .bcdDevice          = 0x0300,               // Version 3.0 (dual interface)
     .iManufacturer      = STRID_MANUFACTURER,
     .iProduct           = STRID_PRODUCT,
     .iSerialNumber      = STRID_SERIAL,
@@ -126,17 +77,21 @@ static const tusb_desc_device_t device_descriptor = {
 
 //--------------------------------------------------------------------
 // Configuration Descriptor
-// Single HID interface with both gamepads (using Report IDs)
+// Two separate HID interfaces, each with its own endpoint
 //--------------------------------------------------------------------
-#define CONFIG_TOTAL_LEN  (TUD_CONFIG_DESC_LEN + TUD_HID_DESC_LEN)
-#define EPNUM_HID         0x81
+#define CONFIG_TOTAL_LEN  (TUD_CONFIG_DESC_LEN + 2 * TUD_HID_DESC_LEN)
+#define EPNUM_HID1        0x81
+#define EPNUM_HID2        0x82
 
 static const uint8_t config_descriptor[] = {
-    // Configuration descriptor
-    TUD_CONFIG_DESCRIPTOR(1, 1, 0, CONFIG_TOTAL_LEN, TUSB_DESC_CONFIG_ATT_REMOTE_WAKEUP, 100),
+    // Configuration descriptor (2 interfaces)
+    TUD_CONFIG_DESCRIPTOR(1, ITF_NUM_TOTAL, 0, CONFIG_TOTAL_LEN, TUSB_DESC_CONFIG_ATT_REMOTE_WAKEUP, 100),
 
-    // HID Interface descriptor (both gamepads share this interface)
-    TUD_HID_DESCRIPTOR(0, 0, HID_ITF_PROTOCOL_NONE, sizeof(hid_report_descriptor), EPNUM_HID, CFG_TUD_HID_EP_BUFSIZE, 8)
+    // HID Interface 0 - Gamepad 1
+    TUD_HID_DESCRIPTOR(ITF_NUM_HID1, 4, HID_ITF_PROTOCOL_NONE, sizeof(hid_report_descriptor_single), EPNUM_HID1, CFG_TUD_HID_EP_BUFSIZE, 8),
+
+    // HID Interface 1 - Gamepad 2
+    TUD_HID_DESCRIPTOR(ITF_NUM_HID2, 5, HID_ITF_PROTOCOL_NONE, sizeof(hid_report_descriptor_single), EPNUM_HID2, CFG_TUD_HID_EP_BUFSIZE, 8)
 };
 
 //--------------------------------------------------------------------
@@ -146,7 +101,9 @@ static const char *string_descriptors[] = {
     (const char[]){0x09, 0x04},     // 0: Language (English US)
     "N64-USB",                       // 1: Manufacturer
     "N64 Dual Controller Adapter",   // 2: Product
-    "0002",                          // 3: Serial Number
+    "0003",                          // 3: Serial Number
+    "N64 Gamepad P1",                // 4: Interface 0 string
+    "N64 Gamepad P2",                // 5: Interface 1 string
 };
 
 //--------------------------------------------------------------------
@@ -165,9 +122,10 @@ const uint8_t *tud_descriptor_configuration_cb(uint8_t index) {
 }
 
 // Invoked when host requests HID report descriptor
+// Each instance gets the same single-gamepad descriptor (no Report IDs)
 const uint8_t *tud_hid_descriptor_report_cb(uint8_t instance) {
     (void)instance;
-    return hid_report_descriptor;
+    return hid_report_descriptor_single;
 }
 
 // Invoked when host requests string descriptor

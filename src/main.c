@@ -43,12 +43,6 @@ static uint32_t g_last_led_toggle = 0;
 static bool g_led_state = false;
 static bool g_pio_init_ok = false;
 
-// Report IDs for each controller
-static const uint8_t g_report_ids[MAX_CONTROLLERS] = {
-    REPORT_ID_GAMEPAD1,
-    REPORT_ID_GAMEPAD2
-};
-
 // External LED states
 static bool g_ext_leds_enabled[MAX_CONTROLLERS] = {false, false};
 
@@ -186,7 +180,7 @@ int main(void) {
         }
 
         // Initialize neutral reports
-        usb_gamepad_init_neutral(&g_reports[i], g_report_ids[i]);
+        usb_gamepad_init_neutral(&g_reports[i]);
     }
 
     if (!g_pio_init_ok) {
@@ -223,18 +217,20 @@ int main(void) {
             continue;
         }
 
-        // Read all controllers and send reports
+        // Read all controllers
         for (int i = 0; i < MAX_CONTROLLERS; i++) {
             if (n64_read(&g_controllers[i], &g_states[i])) {
                 // Controller connected and responding
-                n64_to_usb_report(&g_states[i], &g_reports[i], g_report_ids[i]);
+                n64_to_usb_report(&g_states[i], &g_reports[i]);
             } else {
                 // Controller not responding - send neutral report
-                usb_gamepad_init_neutral(&g_reports[i], g_report_ids[i]);
+                usb_gamepad_init_neutral(&g_reports[i]);
             }
+        }
 
-            // Always send report (allows detection of disconnected controllers)
-            usb_gamepad_send_report(&g_reports[i]);
+        // Send reports - each controller has its own HID interface/endpoint
+        for (int i = 0; i < MAX_CONTROLLERS; i++) {
+            usb_gamepad_send_report(i, &g_reports[i]);
         }
 
         // Update LED status based on connected controllers
