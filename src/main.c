@@ -46,6 +46,10 @@ static bool g_pio_init_ok = false;
 // External LED states
 static bool g_ext_leds_enabled[MAX_CONTROLLERS] = {false, false};
 
+// Connection tracking for debug logs
+static bool g_was_connected[MAX_CONTROLLERS] = {false, false};
+static uint32_t g_connect_count[MAX_CONTROLLERS] = {0, 0};
+
 //--------------------------------------------------------------------
 // External LED Management (optional per-controller LEDs)
 //--------------------------------------------------------------------
@@ -217,20 +221,31 @@ int main(void) {
             continue;
         }
 
-        // Read all controllers
+        // Read and send reports only for connected controllers
         for (int i = 0; i < MAX_CONTROLLERS; i++) {
-            if (n64_read(&g_controllers[i], &g_states[i])) {
-                // Controller connected and responding
-                n64_to_usb_report(&g_states[i], &g_reports[i]);
-            } else {
-                // Controller not responding - send neutral report
-                usb_gamepad_init_neutral(&g_reports[i]);
-            }
-        }
+            bool responding = n64_read(&g_controllers[i], &g_states[i]);
 
-        // Send reports - each controller has its own HID interface/endpoint
-        for (int i = 0; i < MAX_CONTROLLERS; i++) {
-            usb_gamepad_send_report(i, &g_reports[i]);
+            // Detect connection state changes
+            if (responding && !g_was_connected[i]) {
+                g_connect_count[i]++;
+                if (g_connect_count[i] == 1) {
+                    printf("[P%d] Connected (GP%d)\n", i + 1, N64_DATA_PINS[i]);
+                } else {
+                    printf("[P%d] Reconnected (GP%d) - #%lu\n",
+                           i + 1, N64_DATA_PINS[i], g_connect_count[i]);
+                }
+            } else if (!responding && g_was_connected[i]) {
+                printf("[P%d] Disconnected (GP%d)\n", i + 1, N64_DATA_PINS[i]);
+                // Send one final neutral report so the host sees all buttons released
+                usb_gamepad_init_neutral(&g_reports[i]);
+                usb_gamepad_send_report(i, &g_reports[i]);
+            }
+            g_was_connected[i] = responding;
+
+            if (responding) {
+                n64_to_usb_report(&g_states[i], &g_reports[i]);
+                usb_gamepad_send_report(i, &g_reports[i]);
+            }
         }
 
         // Update LED status based on connected controllers

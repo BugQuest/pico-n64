@@ -14,6 +14,7 @@
             display: flex;
             flex-direction: column;
             padding: 8px 16px;
+            gap: 0;
         }
 
         header {
@@ -196,6 +197,40 @@
         .raw-data .label { color: #555; display: inline-block; width: 40px; }
         .raw-data .value { word-break: break-all; }
 
+        .event-log {
+            flex-shrink: 0;
+            max-height: 80px;
+            overflow-y: auto;
+            background: #0d1117;
+            border-radius: 6px;
+            padding: 4px 8px;
+            margin-top: 6px;
+            font-family: monospace;
+            font-size: 10px;
+            line-height: 1.5;
+            border: 1px solid #1e2a3a;
+        }
+        .event-log .ev { padding: 1px 0; }
+        .event-log .ev-time { color: #555; margin-right: 6px; }
+        .event-log .ev-connect { color: #66bb6a; }
+        .event-log .ev-disconnect { color: #ef5350; }
+        .event-log .ev-reconnect { color: #ffa726; }
+        .event-log .ev-info { color: #4fc3f7; }
+        .event-log-header {
+            display: flex; justify-content: space-between;
+            align-items: center; margin-top: 6px;
+        }
+        .event-log-header h3 {
+            font-size: 10px; color: #555;
+            text-transform: uppercase; letter-spacing: 1px;
+        }
+        .event-log-header button {
+            background: #1e2a3a; color: #888; border: none;
+            padding: 2px 8px; border-radius: 4px; font-size: 9px;
+            cursor: pointer;
+        }
+        .event-log-header button:hover { color: #eee; }
+
         footer {
             text-align: center; padding-top: 5px;
             color: #444; font-size: 9px; flex-shrink: 0;
@@ -237,6 +272,12 @@
     </header>
 
     <div class="main-container" id="panels"></div>
+
+    <div class="event-log-header">
+        <h3>Event Log</h3>
+        <button onclick="clearLog()">Clear</button>
+    </div>
+    <div class="event-log" id="event-log"></div>
 
     <footer>
         N64-USB Gamepad Adapter (2x Pico = 4 manettes) |
@@ -358,12 +399,46 @@
             panelsContainer.insertAdjacentHTML('beforeend', createPanel(i));
         }
 
+        // Event log
+        const logEl = document.getElementById('event-log');
+        const connectCounts = {};  // gamepad index → connect count
+        const prevConnected = {};  // player index → bool
+
+        function logEvent(msg, type) {
+            const now = new Date();
+            const time = now.toLocaleTimeString('fr-FR', { hour12: false }) +
+                         '.' + String(now.getMilliseconds()).padStart(3, '0');
+            const div = document.createElement('div');
+            div.className = 'ev';
+            div.innerHTML = `<span class="ev-time">${time}</span><span class="ev-${type}">${msg}</span>`;
+            logEl.appendChild(div);
+            logEl.scrollTop = logEl.scrollHeight;
+            // Keep max 100 entries
+            while (logEl.children.length > 100) logEl.removeChild(logEl.firstChild);
+        }
+
+        function clearLog() {
+            logEl.innerHTML = '';
+            logEvent('Log cleared', 'info');
+        }
+
+        logEvent('Waiting for gamepads... (press a button to activate)', 'info');
+
         // Gamepad tracking
         window.addEventListener('gamepadconnected', (e) => {
-            console.log('Gamepad connected:', e.gamepad.index, e.gamepad.id);
+            const idx = e.gamepad.index;
+            if (!connectCounts[idx]) connectCounts[idx] = 0;
+            connectCounts[idx]++;
+            const name = e.gamepad.id.substring(0, 40);
+            if (connectCounts[idx] === 1) {
+                logEvent(`Gamepad ${idx} connected: ${name}`, 'connect');
+            } else {
+                logEvent(`Gamepad ${idx} reconnected (#${connectCounts[idx]}): ${name}`, 'reconnect');
+            }
         });
         window.addEventListener('gamepaddisconnected', (e) => {
-            console.log('Gamepad disconnected:', e.gamepad.index);
+            const name = e.gamepad.id.substring(0, 40);
+            logEvent(`Gamepad ${e.gamepad.index} disconnected: ${name}`, 'disconnect');
         });
 
         function updatePlayerStatus(player, connected) {
@@ -512,7 +587,17 @@
 
             for (let i = 1; i <= MAX_PLAYERS; i++) {
                 const gp = active[i - 1] || null;
-                updatePlayerStatus(i, gp !== null);
+                const isAlive = !!gp;
+
+                const wasConnected = prevConnected[i] || false;
+                if (isAlive && !wasConnected) {
+                    logEvent(`P${i} connected`, 'connect');
+                } else if (!isAlive && wasConnected) {
+                    logEvent(`P${i} disconnected`, 'disconnect');
+                }
+                prevConnected[i] = isAlive;
+
+                updatePlayerStatus(i, isAlive);
                 updateController(`p${i}`, gp);
             }
 

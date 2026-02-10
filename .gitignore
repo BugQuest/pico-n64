@@ -39,3 +39,6 @@ pico-sdk/
 *.tmp
 *.temp
 *.log
+
+# Video script (private)
+video.md
